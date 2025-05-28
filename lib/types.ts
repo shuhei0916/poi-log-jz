@@ -1,12 +1,11 @@
+// app/lit/types.ts
 export interface Deal {
   id: string
   title: string
   category: string
-  currentPoints: number
-  pointChange: number
-  lastUpdated: string
-  isHot: boolean
   description: string
+  createdAt: string
+  // currentPoints: number
 }
 
 export interface PriceHistory {

@@ -1,3 +1,4 @@
+// app/lib/types.ts
 import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
 import { Deal } from "@/lib/types" 
@@ -7,6 +8,7 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatPoints(points: number): string {
+  if (typeof points !== "number") return "0";
   return points.toLocaleString("ja-JP")
 }
 

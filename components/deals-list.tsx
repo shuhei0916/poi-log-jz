@@ -1,3 +1,4 @@
+// app/lib/deals-list.tsx
 import Link from "next/link"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
