@@ -13,55 +13,75 @@ SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
-# 対象の案件
-deal_id = "deal1"
-url = "https://hapitas.jp/item/detail/itemid/1594/"
 headers = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
 }
 
-# スクレイピングでポイント取得
-response = requests.get(url, headers=headers)
+def get_point_from_hapitas(url: str) -> int | None:
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, "html.parser")
+            tag = soup.find("strong", class_="calculated_detail_point")
+            if tag:
+                point_str = tag.get_text(strip=True).replace(",", "")
+                return int(point_str)
+    except Exception as e:
+        print(f"❌ {url} でエラー: {e}")
+    return None
 
-if response.status_code == 200:
-    soup = BeautifulSoup(response.text, "html.parser")
-    point_tag = soup.find("strong", class_="calculated_detail_point")
+def get_latest_points(source_id: str):
+    result = supabase.table("price_history") \
+        .select("points") \
+        .eq("source_id", source_id) \
+        .order("date", desc=True) \
+        .limit(1) \
+        .execute()
+    if result.data:
+        return result.data[0]["points"]
+    return None
 
-    if point_tag:
-        point_value = point_tag.get_text(strip=True)
-        point_value = int(point_value.replace(",", ""))
-        print(f"現在の取得ポイント: {point_value} pt")
+def update_scraping_sources(source_id: str, points: int):
+    now = datetime.utcnow().isoformat()
+    supabase.table("scraping_sources") \
+        .update({
+            "last_scraped_point": points,
+            "last_scraped_at": now
+        }) \
+        .eq("id", source_id) \
+        .execute()
 
-        # Supabaseから最新データを取得
-        latest_query = (
-            supabase
-            .table("price_history")
-            .select("points")
-            .eq("deal_id", deal_id)
-            .order("date", desc=True)
-            .limit(1)
-            .execute()
-        )
+def post_price_history(source_id: str, points: int):
+    now = datetime.utcnow().isoformat()
+    supabase.table("price_history").insert({
+        "source_id": source_id,
+        "points": points,
+        "date": now
+    }).execute()
 
-        previous_points = None
-        if latest_query.data:
-            previous_points = latest_query.data[0]["points"]
-            print(f"直近の記録ポイント: {previous_points} pt")
+# ----------------------------
+# 🔁 全 scraping_sources を処理
+# ----------------------------
+print("🔍 scraping_sources から全案件を取得中...")
+sources = supabase.table("scraping_sources").select("*").execute().data
 
-        if previous_points == point_value:
-            print("ポイントに変化がないため、POSTをスキップします。")
-        else:
-            new_data = {
-                "deal_id": deal_id,
-                "points": point_value,
-                "date": datetime.utcnow().isoformat()
-                # "url": url  # urlカラム追加後に活用
-            }
-            response = supabase.table("price_history").insert(new_data).execute()
-            print("変化を検知 → SupabaseにPOSTしました。")
-            print(response)
+for src in sources:
+    source_id = src["id"]
+    deal_id = src["deal_id"]
+    url = src["url"]
 
+    print(f"🌐 {url} をクロール中...")
+
+    point = get_point_from_hapitas(url)
+    if point is None:
+        print("⚠️ ポイント情報の取得に失敗しました。\n")
+        continue
+
+    previous = get_latest_points(source_id)
+    if previous == point:
+        print(f"✅ 変化なし（{point}pt）→ スキップ。\n")
     else:
-        print("ポイント情報が見つかりませんでした。")
-else:
-    print(f"ページの取得に失敗しました（{response.status_code}）")
+        print(f"📈 ポイント変動検出！{previous} → {point} pt")
+        post_price_history(source_id, point)
+        update_scraping_sources(source_id, point)
+        print(f"✅ Supabase に保存完了。\n")
