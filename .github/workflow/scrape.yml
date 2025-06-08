@@ -1,0 +1,30 @@
+name: Scrape and Post
+
+on:
+  schedule:
+    - cron: '0 * * * *'  # 毎時0分（日本時間だと+9時間ずれる） ※UTCベース
+  workflow_dispatch:      # 手動実行も許可
+
+jobs:
+  run-script:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install -r requirements.txt
+
+      - name: Run scraper
+        run: |
+          source .venv/bin/activate
+          python scripts/scrape_and_post.py
